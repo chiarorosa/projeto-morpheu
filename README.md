@@ -64,6 +64,7 @@ memória, o modelo de voz ativo é descarregado e recarregado em seguida.
 
 ## Como a clonagem funciona
 
+
 1. **Texto** — tags como `[laugh]` são removidas; números, valores (R$, US$, €), porcentagens, horas, ordinais,
    unidades e abreviações são escritos por extenso no idioma, com concordância de gênero em português
    ("2 dúzias" → "duas dúzias"). Desligável em "Ler números por extenso".
