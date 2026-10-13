@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, type ActiveState, type Generation, type Mode, type ModelInfo, type ParamSpec, type ParamValue, type Voice } from "./api";
-import { LANG_PT } from "./langs";
+import { EMOTION_PT, LANG_PT } from "./langs";
 
 const DESIGN_CHIPS: { group: string; options: string[] }[] = [
   { group: "Gênero", options: ["voz masculina", "voz feminina"] },
@@ -46,6 +46,8 @@ export default function Studio({ mode, models, active, voices, onActivate, onVoi
   const [speakers, setSpeakers] = useState<string[]>([]);
   const [params, setParams] = useState<Record<string, ParamValue>>({});
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [emotion, setEmotion] = useState("");
+  const [intensity, setIntensity] = useState<"leve" | "normal" | "forte">("normal");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<Generation | null>(null);
@@ -97,6 +99,7 @@ export default function Studio({ mode, models, active, voices, onActivate, onVoi
         ...(mode === "clone" ? { voice_id: voiceId } : {}),
         ...(mode !== "clone" && instruct.trim() ? { instruct } : {}),
         ...(mode === "tts" ? { speaker } : {}),
+        ...(mode === "clone" && emotion && model.emotions.some((e) => e.key === emotion) ? { emotion, intensity } : {}),
       });
       setResult(item);
     } catch (e) {
@@ -153,6 +156,31 @@ export default function Studio({ mode, models, active, voices, onActivate, onVoi
           </div>
           {voiceId && <audio controls src={api.voiceAudioUrl(voiceId)} className="player" />}
           {voice && model && <ReferenceHint voice={voice} model={model} />}
+          {model && model.emotions.length > 0 ? (
+            <div className="row wrap">
+              <label className="field">
+                <span>Emoção</span>
+                <select value={emotion} onChange={(e) => setEmotion(e.target.value)}>
+                  <option value="">Neutra (como na referência)</option>
+                  {model.emotions.map((e) => <option key={e.key} value={e.key}>{e.label}</option>)}
+                </select>
+              </label>
+              {emotion && (
+                <label className="field">
+                  <span>Intensidade</span>
+                  <select value={intensity} onChange={(e) => setIntensity(e.target.value as typeof intensity)}>
+                    <option value="leve">Leve</option>
+                    <option value="normal">Normal</option>
+                    <option value="forte">Forte</option>
+                  </select>
+                </label>
+              )}
+            </div>
+          ) : (
+            models.some((m) => m.emotions.length > 0) && (
+              <p className="muted small">Para clonar com emoção, use {models.filter((m) => m.emotions.length).map((m) => m.name).join(" ou ")}.</p>
+            )
+          )}
         </section>
       )}
 
@@ -256,7 +284,9 @@ function ReferenceHint({ voice, model }: { voice: Voice; model: ModelInfo }) {
 
 export function GenerationDetails({ item }: { item: Generation }) {
   const p = item.params;
+  const EMO_INT: Record<string, string> = { leve: "leve", normal: "normal", forte: "forte" };
   const lines = [
+    typeof p.emotion === "string" ? `Emoção: ${EMOTION_PT[p.emotion] ?? p.emotion} (${EMO_INT[String(p.intensity)] ?? p.intensity})` : null,
     typeof p.reference === "string" ? `Referência: ${p.reference}` : null,
     Number(p.chunks) > 1 ? `Gerado em ${p.chunks} trechos` : null,
     p.retries ? `${p.retries} trecho(s) refeito(s) por saída defeituosa` : null,

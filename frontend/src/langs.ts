@@ -9,3 +9,9 @@ export const LANG_PT: Record<string, string> = {
 
 // Languages offered when saving a voice (what the speaker speaks in the reference).
 export const VOICE_LANGUAGES = ["Portuguese", "English", "Spanish", "French", "German", "Italian", "Auto"];
+
+export const EMOTION_PT: Record<string, string> = {
+  joy: "Alegria", sad: "Tristeza", ang: "Raiva", fear: "Medo", surprise: "Surpresa", disgust: "Nojo",
+  awe: "Admiração", nostalgia: "Nostalgia", contempt: "Desprezo", disapproval: "Desaprovação",
+  remorse: "Remorso", outrage: "Indignação", despair: "Desespero",
+};

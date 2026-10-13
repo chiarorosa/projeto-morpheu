@@ -29,6 +29,8 @@ class GenerateBody(BaseModel):
     instruct: str | None = Field(default=None, max_length=2000)
     speaker: str | None = None
     params: dict = Field(default_factory=dict)
+    emotion: str | None = Field(default=None, max_length=32)
+    intensity: str = Field(default="normal", pattern="^(leve|normal|forte)$")
 
     @field_validator("text")
     @classmethod
