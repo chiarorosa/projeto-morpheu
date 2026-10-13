@@ -1,0 +1,21 @@
+name: Feature request / Sugestão
+description: An idea, a new engine, a language, a workflow.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does it solve? / Que problema resolve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal / Proposta
+      description: How it could work. Links to models, papers or similar tools help.
+  - type: checkboxes
+    id: help
+    attributes:
+      label: Contribution
+      options:
+        - label: I would like to work on this / Quero trabalhar nisso

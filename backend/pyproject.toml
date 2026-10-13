@@ -1,8 +1,27 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "morpheu"
 version = "0.1.0"
-description = "Local voice cloning, voice design and text-to-speech studio"
+description = "Local, offline AI voice cloning and text-to-speech studio (OmniVoice, Chatterbox, VoxCPM2, Qwen3-TTS)"
+license = "MIT"
 requires-python = ">=3.12,<3.13"
+keywords = ["voice cloning", "text-to-speech", "tts", "speech synthesis", "qwen3-tts", "chatterbox",
+            "omnivoice", "voxcpm", "emotional tts", "portuguese", "offline", "local ai"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: GPU :: NVIDIA CUDA",
+    "Intended Audience :: End Users/Desktop",
+    "Intended Audience :: Developers",
+    "Natural Language :: Portuguese (Brazilian)",
+    "Natural Language :: English",
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Multimedia :: Sound/Audio :: Speech",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
 dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
@@ -18,8 +37,19 @@ dependencies = [
     # chatterbox-tts, omnivoice, voxcpm
 ]
 
+[project.urls]
+Homepage = "https://github.com/chiarorosa/projeto-morpheu"
+Issues = "https://github.com/chiarorosa/projeto-morpheu/issues"
+
 [project.optional-dependencies]
 dev = ["pytest>=8", "httpx>=0.27"]
+
+[tool.setuptools.packages.find]
+include = ["morpheu*"]
+
+[tool.setuptools.package-data]
+"morpheu.vendor.emotion_steer" = ["*.qlsteer", "LICENSE", "NOTICE", "MANIFEST.md"]
+"morpheu.vendor.higgs_tokenizer" = ["NOTICE"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -1,0 +1,42 @@
+name: Bug report / Relatar um problema
+description: Something does not work as expected.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened? / O que aconteceu?
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce / Como reproduzir
+      placeholder: |
+        1. Load model ...
+        2. Choose voice ...
+        3. Generate ...
+    validations:
+      required: true
+  - type: input
+    id: model
+    attributes:
+      label: Model / Modelo
+      placeholder: omnivoice, chatterbox-multilingual, voxcpm2, qwen3-clone-1.7b ...
+  - type: input
+    id: env
+    attributes:
+      label: Environment / Ambiente
+      placeholder: Windows 11, RTX 3060 Ti 8 GB, driver 5xx, commit abc1234
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Terminal output of `morpheu.cmd --server` around the error.
+      render: text
+  - type: markdown
+    attributes:
+      value: Please do not attach recordings of people who did not consent.

@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/chiarorosa/projeto-morpheu/security/advisories/new
+    about: Report security issues privately.
+  - name: Questions and ideas / Dúvidas e ideias
+    url: https://github.com/chiarorosa/projeto-morpheu/discussions
+    about: Ask questions and share results in Discussions.
