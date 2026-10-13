@@ -27,7 +27,7 @@ morpheu.cmd --server     só a API
 
 Fluxo típico:
 
-1. **Biblioteca** → envie ou grave de 10 a 30 s de fala limpa, escolha o idioma e, se quiser, cole a transcrição
+1. **Biblioteca** → leia em voz alta o **texto para gravar** (narração, conversa ou apresentação) ou envie um áudio de 10 a 30 s de fala limpa, escolha o idioma e, se quiser, cole a transcrição
    (em branco, ela é feita automaticamente). A referência é analisada logo depois de salva.
 2. **Clonar** → escolha um modelo (os marcados "bom em português" são os indicados para pt-BR), carregue-o,
    escolha a voz, digite o texto e clique em **Gerar fala**.

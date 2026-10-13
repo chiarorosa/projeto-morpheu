@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api, type Voice } from "./api";
 import { LANG_PT, VOICE_LANGUAGES } from "./langs";
+import { RECORDING_TIPS, scriptsFor } from "./scripts";
 import { toWav } from "./wav";
 
 const SOURCE_LABEL = { upload: "Arquivo", recording: "Gravação", design: "Desenhada" } as const;
@@ -107,6 +108,7 @@ function NewVoice({ onCreated }: { onCreated: (v: Voice) => void }) {
   return (
     <section className="card">
       <strong>Nova voz</strong>
+      <RecordingScriptCard language={language} transcript={transcript} onUse={setTranscript} />
       <div className="row wrap">
         <label className="btn ghost file">
           Enviar áudio
@@ -144,6 +146,43 @@ function NewVoice({ onCreated }: { onCreated: (v: Voice) => void }) {
       </div>
       {error && <div className="alert">{error}</div>}
     </section>
+  );
+}
+
+function RecordingScriptCard({ language, transcript, onUse }: {
+  language: string;
+  transcript: string;
+  onUse: (text: string) => void;
+}) {
+  const scripts = scriptsFor(language);
+  const [index, setIndex] = useState(0);
+  const script = scripts[Math.min(index, scripts.length - 1)];
+  const inUse = transcript.trim() === script.text;
+
+  return (
+    <div className="script-card">
+      <div className="row between wrap">
+        <span className="small"><strong>Texto para gravar</strong> <span className="muted">· {script.hint}</span></span>
+        {scripts.length > 1 && (
+          <div className="row">
+            {scripts.map((s, i) => (
+              <button key={s.id} className={`chip ${s.id === script.id ? "active" : ""}`} onClick={() => setIndex(i)}>
+                {s.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+      <p className="script-text">{script.text}</p>
+      <div className="row between wrap">
+        <ul className="hints small muted">
+          {RECORDING_TIPS.map((t) => <li key={t}>{t}</li>)}
+        </ul>
+        <button className="btn small" onClick={() => onUse(script.text)} disabled={inUse}>
+          {inUse ? "Transcrição preenchida ✓" : "Usar como transcrição"}
+        </button>
+      </div>
+    </div>
   );
 }
 
