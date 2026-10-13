@@ -158,13 +158,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the workflow, and the roadmap below f
 
 ## Roadmap
 
-- Voice design with OmniVoice and VoxCPM2
-- Streaming generation
-- Speech-to-text (dictation, file transcription)
-- Audiobooks: import PDF/DOCX/EPUB, one voice per character
-- Dubbing: transcribe, translate, re-voice, subtitle
-- MCP server
-- Linux/macOS support, English UI
+Streaming, speech-to-text, audiobooks, video dubbing, AI video editing, more engines, MCP and Linux support —
+see the phased plan with sizes and first-issue picks in **[ROADMAP.md](ROADMAP.md)**.
 
 ## Responsible use
 
