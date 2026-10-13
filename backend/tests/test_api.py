@@ -201,3 +201,24 @@ def test_openai_compatible_speech_endpoint_uses_saved_voice(client, wav_bytes):
     assert r.status_code == 200
     assert r.headers["content-type"] == "audio/wav"
     assert r.content[:4] == b"RIFF"
+
+
+def test_real_engines_construct_and_describe_without_a_gpu():
+    from morpheu.app import default_manager
+
+    manager = default_manager()
+    assert {"omnivoice", "chatterbox-multilingual", "voxcpm2", "qwen3-clone-1.7b"} <= set(manager.engines)
+    for engine in manager.engines.values():
+        info = engine.info.to_dict()
+        assert info["ref_min_sec"] <= info["ref_max_sec"]
+        assert not engine.is_loaded
+        engine.forget_voice("abc")  # must not touch the GPU or fail before load
+
+
+def test_transformers5_rope_settings_are_honoured():
+    from morpheu.vendor.higgs_tokenizer import install
+    from transformers.models.qwen3.configuration_qwen3 import Qwen3Config
+
+    install()
+    config = Qwen3Config(rope_parameters={"rope_theta": 1000000, "rope_type": "default"})
+    assert config.rope_theta == 1000000

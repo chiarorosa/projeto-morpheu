@@ -11,7 +11,8 @@ from . import __version__
 from .config import Settings
 from .history import History
 from .manager import ModelManager
-from .studio import BadRequest, NotReady, Studio
+from .reference import ReferenceError
+from .studio import BadRequest, GenerationFailed, NotReady, Studio
 from .voices import VoiceError, VoiceStore
 
 
@@ -40,6 +41,11 @@ class GenerateBody(BaseModel):
 class VoicePatch(BaseModel):
     name: str | None = None
     transcript: str | None = None
+    language: str | None = None
+
+
+class AnalyzeBody(BaseModel):
+    language: str | None = None
 
 
 class SaveFromHistory(BaseModel):
@@ -67,17 +73,34 @@ def default_manager() -> ModelManager:
             FakeEngine("fake-design", {"design"}),
             FakeEngine("fake-tts", {"tts"}, speakers=["Ryan", "Vivian"]),
         ])
+    from .engines.chatterbox import ChatterboxEngine
+    from .engines.omnivoice import OmniVoiceEngine
     from .engines.qwen3 import qwen3_engines
+    from .engines.voxcpm import VoxCPMEngine
 
-    return ModelManager(qwen3_engines())
+    return ModelManager([OmniVoiceEngine(), ChatterboxEngine(), VoxCPMEngine(), *qwen3_engines()])
 
 
-def create_app(settings: Settings | None = None, manager: ModelManager | None = None) -> FastAPI:
+def default_asr():
+    import os
+
+    if os.environ.get("MORPHEU_FAKE_ENGINES") == "1":
+        return None
+    from .asr import AsrService
+
+    return AsrService()
+
+
+_UNSET = object()
+
+
+def create_app(settings: Settings | None = None, manager: ModelManager | None = None, asr=_UNSET) -> FastAPI:
     settings = settings or Settings()
     manager = manager or default_manager()
+    asr = default_asr() if asr is _UNSET else asr
     voices = VoiceStore(settings.voices_dir, settings.min_reference_seconds, settings.max_reference_seconds)
     history = History(settings.db_path, settings.outputs_dir)
-    studio = Studio(manager, voices, history)
+    studio = Studio(manager, voices, history, asr)
 
     @asynccontextmanager
     async def lifespan(_app):
@@ -126,6 +149,12 @@ def create_app(settings: Settings | None = None, manager: ModelManager | None = 
             raise HTTPException(400, str(exc)) from None
         except NotReady as exc:
             raise HTTPException(409, str(exc)) from None
+        except GenerationFailed as exc:
+            raise HTTPException(422, str(exc)) from None
+
+    @app.get("/api/v1/system")
+    def system():
+        return {"asr": asr is not None}
 
     # ---------------- voices ----------------
     @app.get("/api/v1/voices")
@@ -134,12 +163,13 @@ def create_app(settings: Settings | None = None, manager: ModelManager | None = 
 
     @app.post("/api/v1/voices", status_code=201)
     async def create_voice(name: str = Form(...), transcript: str = Form(""), source: str = Form("upload"),
-                           preprocess: bool = Form(True), audio: UploadFile = File(...)):
+                           preprocess: bool = Form(True), language: str = Form("Auto"), audio: UploadFile = File(...)):
         data = await audio.read()
         if source not in ("upload", "recording"):
             raise HTTPException(400, "Origem inválida.")
         try:
-            return voices.create(name, data, transcript, source=source, preprocess=preprocess).to_dict()
+            return voices.create(name, data, transcript, source=source, preprocess=preprocess,
+                                 language=language).to_dict()
         except VoiceError as exc:
             raise HTTPException(400, str(exc)) from None
 
@@ -169,13 +199,28 @@ def create_app(settings: Settings | None = None, manager: ModelManager | None = 
     @app.patch("/api/v1/voices/{voice_id}")
     def patch_voice(voice_id: str, body: VoicePatch):
         try:
-            voice = voices.update(voice_id, body.name, body.transcript)
+            voice = voices.update(voice_id, body.name, body.transcript, body.language)
         except KeyError:
             raise HTTPException(404, "Voz não encontrada.") from None
         except VoiceError as exc:
             raise HTTPException(400, str(exc)) from None
         if body.transcript is not None:
             manager.forget_voice(voice_id)
+        return voice.to_dict()
+
+    @app.post("/api/v1/voices/{voice_id}/analyze")
+    def analyze_voice(voice_id: str, body: AnalyzeBody | None = None):
+        """Transcribe the reference (when it has no transcript), time its words, and check
+        that a typed transcript matches what is actually said."""
+        if asr is None:
+            raise HTTPException(409, "A transcrição automática não está disponível neste modo.")
+        try:
+            voice = studio.references.analyze(voice_id, (body.language if body else None))
+        except KeyError:
+            raise HTTPException(404, "Voz não encontrada.") from None
+        except ReferenceError as exc:
+            raise HTTPException(422, str(exc)) from None
+        manager.forget_voice(voice_id)
         return voice.to_dict()
 
     @app.delete("/api/v1/voices/{voice_id}", status_code=204)
@@ -230,6 +275,8 @@ def create_app(settings: Settings | None = None, manager: ModelManager | None = 
             raise HTTPException(400, str(exc)) from None
         except NotReady as exc:
             raise HTTPException(409, str(exc)) from None
+        except GenerationFailed as exc:
+            raise HTTPException(422, str(exc)) from None
         return Response(history.audio_path(item["id"]).read_bytes(), media_type="audio/wav")
 
     @app.get("/api/v1/health")

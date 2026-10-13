@@ -11,6 +11,11 @@ dependencies = [
     "numpy>=1.26",
     "pywebview>=5.0",
     "qwen-tts",
+    "qwen-asr",
+    "num2words",
+    "pyloudnorm",
+    # Installed with --no-deps from requirements.lock.txt (their pins conflict with each other):
+    # chatterbox-tts, omnivoice, voxcpm
 ]
 
 [project.optional-dependencies]

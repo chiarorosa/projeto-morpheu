@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 
 from morpheu.app import create_app
 from morpheu.config import Settings
-from morpheu.engines.fake import FakeEngine
+from morpheu.engines.fake import FakeAsr, FakeEngine
 from morpheu.manager import ModelManager
 
 
@@ -37,8 +37,13 @@ def manager():
 
 
 @pytest.fixture
-def client(settings, manager):
-    app = create_app(settings, manager=manager)
+def asr():
+    return FakeAsr()
+
+
+@pytest.fixture
+def client(settings, manager, asr):
+    app = create_app(settings, manager=manager, asr=asr)
     with TestClient(app) as c:
         yield c
 

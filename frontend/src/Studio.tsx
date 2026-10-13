@@ -1,10 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { api, type ActiveState, type Generation, type Mode, type ModelInfo, type ParamSpec, type Voice } from "./api";
-
-const LANG_PT: Record<string, string> = {
-  Auto: "Automático", Portuguese: "Português", English: "Inglês", Spanish: "Espanhol", French: "Francês",
-  German: "Alemão", Italian: "Italiano", Russian: "Russo", Chinese: "Chinês", Japanese: "Japonês", Korean: "Coreano",
-};
+import { api, type ActiveState, type Generation, type Mode, type ModelInfo, type ParamSpec, type ParamValue, type Voice } from "./api";
+import { LANG_PT } from "./langs";
 
 const DESIGN_CHIPS: { group: string; options: string[] }[] = [
   { group: "Gênero", options: ["voz masculina", "voz feminina"] },
@@ -38,7 +34,8 @@ export default function Studio({ mode, models, active, voices, onActivate, onVoi
   useEffect(() => {
     if (!candidates.length || candidates.some((m) => m.id === modelId)) return;
     const loaded = candidates.find((m) => m.status === "ready");
-    setModelId((loaded ?? candidates[0]).id);
+    const recommended = candidates.find((m) => m.recommended_for.includes("Portuguese"));
+    setModelId((loaded ?? recommended ?? candidates[0]).id);
   }, [candidates, modelId]);
 
   const [text, setText] = useState("");
@@ -47,7 +44,7 @@ export default function Studio({ mode, models, active, voices, onActivate, onVoi
   const [instruct, setInstruct] = useState("");
   const [speaker, setSpeaker] = useState("");
   const [speakers, setSpeakers] = useState<string[]>([]);
-  const [params, setParams] = useState<Record<string, number | boolean>>({});
+  const [params, setParams] = useState<Record<string, ParamValue>>({});
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -57,10 +54,22 @@ export default function Studio({ mode, models, active, voices, onActivate, onVoi
     if (!voiceId && voices.length) setVoiceId(voices[0].id);
   }, [voices, voiceId]);
 
+  const voice = voices.find((v) => v.id === voiceId);
+
+  // Default to the voice's language; models without auto-detection need an explicit one.
+  useEffect(() => {
+    if (!model) return;
+    const preferred = mode === "clone" && voice?.language && voice.language !== "Auto" ? voice.language : null;
+    setLanguage((cur) => {
+      if (preferred && model.languages.includes(preferred)) return preferred;
+      if (model.languages.includes(cur)) return cur;
+      return model.languages.includes("Portuguese") ? "Portuguese" : model.languages[0];
+    });
+  }, [model?.id, voice?.id, voice?.language]);
+
   useEffect(() => {
     if (!model) return;
     setParams(Object.fromEntries(model.params.map((p) => [p.key, p.default])));
-    if (!model.languages.includes(language)) setLanguage("Auto");
     if (mode === "tts")
       api.speakers(model.id).then((s) => {
         setSpeakers(s);
@@ -108,7 +117,9 @@ export default function Studio({ mode, models, active, voices, onActivate, onVoi
             <select value={modelId} onChange={(e) => setModelId(e.target.value)}>
               {candidates.map((m) => (
                 <option key={m.id} value={m.id}>
-                  {m.name} {m.vram_gb ? `· ~${m.vram_gb} GB` : ""} {m.status === "ready" ? "· carregado" : ""}
+                  {m.name} {m.vram_gb ? `· ~${m.vram_gb} GB` : ""}
+                  {m.recommended_for.includes("Portuguese") ? " · bom em português" : ""}
+                  {m.status === "ready" ? " · carregado" : ""}
                 </option>
               ))}
             </select>
@@ -141,6 +152,7 @@ export default function Studio({ mode, models, active, voices, onActivate, onVoi
             <button className="btn ghost" onClick={goToVoices}>+ Nova voz</button>
           </div>
           {voiceId && <audio controls src={api.voiceAudioUrl(voiceId)} className="player" />}
+          {voice && model && <ReferenceHint voice={voice} model={model} />}
         </section>
       )}
 
@@ -223,10 +235,45 @@ export default function Studio({ mode, models, active, voices, onActivate, onVoi
   );
 }
 
+function ReferenceHint({ voice, model }: { voice: Voice; model: ModelInfo }) {
+  const notes: string[] = [];
+  if (voice.duration < model.ref_min_sec)
+    notes.push(`${model.name} precisa de pelo menos ${model.ref_min_sec} s de referência.`);
+  else if (voice.duration > model.ref_max_sec + 0.5)
+    notes.push(`Este modelo clona melhor com até ${model.ref_max_sec} s: será usado o trecho mais fluente da referência que começa e termina em fim de frase.`);
+  if (model.uses_ref_text && !voice.transcript)
+    notes.push("Sem transcrição: ela será feita automaticamente na primeira geração.");
+  if (voice.transcript_mismatch)
+    notes.push("A transcrição não bate com o que se ouve no áudio. Corrija-a na Biblioteca para clonar melhor.");
+  if (!model.uses_ref_text) notes.push("Este modelo usa só o áudio da referência, não a transcrição.");
+  if (!notes.length) return null;
+  return (
+    <ul className={`hints small ${voice.transcript_mismatch || voice.duration < model.ref_min_sec ? "warn" : "muted"}`}>
+      {notes.map((n) => <li key={n}>{n}</li>)}
+    </ul>
+  );
+}
+
+export function GenerationDetails({ item }: { item: Generation }) {
+  const p = item.params;
+  const lines = [
+    typeof p.reference === "string" ? `Referência: ${p.reference}` : null,
+    Number(p.chunks) > 1 ? `Gerado em ${p.chunks} trechos` : null,
+    p.retries ? `${p.retries} trecho(s) refeito(s) por saída defeituosa` : null,
+    typeof p.spoken_text === "string" ? `Texto falado: ${p.spoken_text}` : null,
+  ].filter(Boolean);
+  if (!lines.length) return null;
+  return (
+    <ul className="hints small muted">
+      {lines.map((l) => <li key={l as string}>{l}</li>)}
+    </ul>
+  );
+}
+
 function ParamsPanel({ specs, values, onChange, onReset }: {
   specs: ParamSpec[];
-  values: Record<string, number | boolean>;
-  onChange: (k: string, v: number | boolean) => void;
+  values: Record<string, ParamValue>;
+  onChange: (k: string, v: ParamValue) => void;
   onReset: () => void;
 }) {
   return (
@@ -277,6 +324,7 @@ function ResultCard({ item, onSaved }: { item: Generation; onSaved: () => void }
         </span>
       </div>
       <audio controls autoPlay src={api.historyAudioUrl(item.id)} className="player" />
+      <GenerationDetails item={item} />
       <div className="row between wrap">
         <a className="btn ghost" href={api.historyAudioUrl(item.id, true)}>Baixar WAV</a>
         {item.mode === "design" && !saved && (
