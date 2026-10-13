@@ -170,9 +170,5 @@ deles (tabela acima). Terceiros incluídos em `backend/morpheu/vendor/` mantêm 
 
 ## Próximas fases
 
-- Desenhar voz também com OmniVoice e VoxCPM2
-- Streaming da geração
-- STT (ditado e transcrição de arquivos)
-- Audiobook: importar PDF/DOCX/EPUB, personagens e uma voz por personagem
-- Dublagem: transcrever, traduzir, revozear e legendar
-- Servidor MCP
+Streaming, transcrição, audiolivros, dublagem de vídeo, edição de vídeo com IA, mais motores, MCP e Linux —
+veja o plano por fases, com tamanhos e boas primeiras tarefas, no **[ROADMAP.md](ROADMAP.md)** (em inglês).
