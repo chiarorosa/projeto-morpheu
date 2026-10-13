@@ -101,6 +101,8 @@ class Qwen3Engine(Engine):
                         subtalker_top_k=p["top_k"], max_new_tokens=_max_new_tokens(req.text))
         language = req.language or "Auto"
 
+        if req.mode == "clone" and req.emotion:
+            return self._steered_clone(req, language, sampling)
         if req.mode == "clone":
             wavs, sr = self._model.generate_voice_clone(
                 text=req.text, language=language, voice_clone_prompt=self._clone_prompt(req), **sampling,
@@ -114,20 +116,42 @@ class Qwen3Engine(Engine):
         return np.asarray(wavs[0], dtype=np.float32), int(sr)
 
 
+    def _steered_clone(self, req: GenerationRequest, language: str, sampling: dict) -> tuple[np.ndarray, int]:
+        """Clone with an emotion direction added to the talker's residual stream (see steer.py)."""
+        from .. import steer
+
+        emotion = steer.BY_KEY[req.emotion]
+        layers = steer.talker_layers(self._model)
+        vector = steer.load_vector(emotion.key)
+        if vector.shape[1] != self._model.model.talker.config.hidden_size:
+            raise RuntimeError(f"{self.info.name} não aceita os vetores de emoção (só o modelo 1.7B).")
+        with steer.Steerer(layers, vector, steer.weight_for(emotion.key, req.intensity), emotion.decay):
+            wavs, sr = self._model.generate_voice_clone(
+                text=req.text, language=language, voice_clone_prompt=self._clone_prompt(req), **sampling,
+            )
+        wav = np.asarray(wavs[0], dtype=np.float32)
+        # Sadness is meant to sink a little; everything else should hold its level to the end.
+        return steer.flatten_fade(wav, -3.0 if emotion.key in ("sad", "despair") else -1.5), int(sr)
+
+
 QWEN3_BUILTIN_SPEAKERS = ["Aiden", "Dylan", "Eric", "Ono_Anna", "Ryan", "Serena", "Sohee", "Uncle_Fu", "Vivian"]
 
 
 def qwen3_engines() -> list[Engine]:
-    def info(id_, name, desc, modes, vram):
+    from .. import steer
+
+    def info(id_, name, desc, modes, vram, emotions=False):
         return ModelInfo(id=id_, name=name, description=desc, modes=modes, languages=LANGUAGES, params=SAMPLING_PARAMS,
-                         vram_gb=vram, ref_min_sec=1.5, ref_max_sec=10.0, max_chunk_chars=500)
+                         vram_gb=vram, ref_min_sec=1.5, ref_max_sec=10.0, max_chunk_chars=500,
+                         emotions=[{"key": e.key, "label": e.label} for e in steer.available()] if emotions else [])
 
     return [
         Qwen3Engine(info("qwen3-clone-0.6b", "Qwen3 Clone 0.6B",
                          "Clonagem leve e rápida a partir de alguns segundos de áudio.", ["clone"], 3),
                     "Qwen/Qwen3-TTS-12Hz-0.6B-Base"),
         Qwen3Engine(info("qwen3-clone-1.7b", "Qwen3 Clone 1.7B",
-                         "Clonagem de maior qualidade. Mais lenta e usa mais VRAM.", ["clone"], 6),
+                         "Clonagem de maior qualidade e com emoções (alegria, tristeza, raiva…). Mais lenta.",
+                         ["clone"], 6, emotions=True),
                     "Qwen/Qwen3-TTS-12Hz-1.7B-Base"),
         Qwen3Engine(info("qwen3-design", "Qwen3 Design 1.7B",
                          "Cria uma voz nova a partir de uma descrição em linguagem natural.", ["design"], 6),

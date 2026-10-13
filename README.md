@@ -81,6 +81,24 @@ memória, o modelo de voz ativo é descarregado e recarregado em seguida.
 No Histórico, cada geração mostra o trecho da referência usado, o texto efetivamente falado e se algum
 trecho foi refeito.
 
+## Emoções na voz clonada
+
+Com o **Qwen3 Clone 1.7B**, a aba Clonar oferece 13 emoções (alegria, tristeza, raiva, medo, surpresa, nojo,
+admiração, nostalgia, desprezo, desaprovação, remorso, indignação, desespero) em três intensidades. É o mesmo
+mecanismo de *activation steering*: cada emoção é uma direção no fluxo residual do
+"talker" do modelo; durante a geração ela é somada após as camadas 21–25, o estado é reescalado para manter
+a norma (muda a direção, não a intensidade do sinal) e o peso decai a cada quadro (×0,985). O prompt nunca é
+alterado, por isso a voz continua sendo a da referência. Depois, uma correção segura o volume do fim da fala
+para ele não cair mais que 1,5 dB (3 dB em tristeza e desespero).
+
+Medido com a mesma frase e semente (referência real em pt-BR): pronúncia sem erros em todas; semelhança de
+voz 0,89–0,91 contra 0,90 da versão neutra; tom mediano 100 Hz neutro → 114 alegria, 88 tristeza (e mais
+monótona e lenta), 146 raiva, 118 surpresa; medo deixa a fala mais lenta.
+
+Os vetores (`backend/morpheu/vendor/emotion_steer/*.qlsteer`) são do motor
+[qwen3-tts em C de Gabriele Mastrapasqua](https://github.com/gabriele-mastrapasqua/qwen3-tts) (licença MIT,
+commit `5b43adf`). Funcionam só no modelo 1.7B (dimensão 2048).
+
 ## Estrutura
 
 ```
@@ -97,7 +115,8 @@ backend/morpheu/
   chunker.py        divisão de textos longos em frases
   quality.py        detecção de saída defeituosa, loudness, junção de trechos
   compat.py         torchaudio via soundfile; download do HF sem a corrida de symlinks no Windows
-  vendor/           tokenizer Higgs do transformers 5 (Apache-2.0) para o OmniVoice rodar no transformers 4.57
+  steer.py          emoções por steering do talker do Qwen3 1.7B
+  vendor/           vetores de emoção (MIT) e tokenizer Higgs do transformers 5 (Apache-2.0)
   voices.py         biblioteca em data/voices/<id>/
   history.py        histórico em SQLite + WAVs em data/outputs/
   audio.py          leitura/escrita, corte de silêncio, normalização
@@ -129,7 +148,6 @@ A API escuta só em 127.0.0.1 e não tem autenticação.
 
 ## Próximas fases
 
-- Clonagem com emoção controlada (o original usa vetores de direção próprios para o Qwen3)
 - Desenhar voz também com OmniVoice e VoxCPM2
 - Streaming da geração
 - STT (ditado e transcrição de arquivos)

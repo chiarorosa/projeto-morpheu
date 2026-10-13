@@ -25,6 +25,7 @@ export interface ModelInfo {
   max_chunk_chars: number;
   sample_rate: number;
   recommended_for: string[];
+  emotions: { key: string; label: string }[];
   status: "unloaded" | "loading" | "ready" | "error";
 }
 
@@ -78,6 +79,8 @@ export interface GenerateRequest {
   instruct?: string;
   speaker?: string;
   params: Record<string, ParamValue>;
+  emotion?: string;
+  intensity?: "leve" | "normal" | "forte";
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {

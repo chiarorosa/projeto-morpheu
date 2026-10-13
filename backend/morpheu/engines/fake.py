@@ -12,7 +12,7 @@ FAKE_PARAMS = [
 class FakeEngine(Engine):
     def __init__(self, model_id: str, modes: set[str], speakers: list[str] | None = None, *,
                  ref_max_sec: float = 10.0, uses_ref_text: bool = True, max_chunk_chars: int = 400,
-                 runaway_first: int = 0):
+                 runaway_first: int = 0, emotions: list[dict] | None = None):
         self.info = ModelInfo(
             id=model_id,
             name=model_id,
@@ -22,6 +22,7 @@ class FakeEngine(Engine):
             ref_max_sec=ref_max_sec,
             uses_ref_text=uses_ref_text,
             max_chunk_chars=max_chunk_chars,
+            emotions=emotions or [],
         )
         self._speakers = speakers or []
         self._loaded = False

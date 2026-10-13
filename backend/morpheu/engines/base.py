@@ -65,6 +65,8 @@ class ModelInfo:
     max_chunk_chars: int = 400
     sample_rate: int = 24000
     recommended_for: list[str] = field(default_factory=list)
+    # Emotions this model can steer a cloned voice toward: [{"key", "label"}].
+    emotions: list[dict] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         d = asdict(self)
@@ -96,6 +98,9 @@ class GenerationRequest:
     ref_text: str | None = None
     # Identifies voice + reference window, so engines can cache features per window.
     ref_key: str | None = None
+    # Emotion steering (clone mode, on models that list emotions).
+    emotion: str | None = None
+    intensity: str = "normal"
     # design / tts
     instruct: str | None = None
     speaker: str | None = None

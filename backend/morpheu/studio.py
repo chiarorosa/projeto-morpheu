@@ -45,7 +45,8 @@ class Studio:
 
     def generate(self, *, mode: str, model_id: str, text: str, language: str = "Auto",
                  voice_id: str | None = None, instruct: str | None = None,
-                 speaker: str | None = None, params: dict | None = None) -> dict:
+                 speaker: str | None = None, params: dict | None = None,
+                 emotion: str | None = None, intensity: str = "normal") -> dict:
         try:
             engine = self.manager.get(model_id)
         except KeyError:
@@ -59,6 +60,15 @@ class Studio:
             resolved = info.resolve_params(params or {})
         except ValueError as exc:
             raise BadRequest(str(exc)) from None
+        if emotion:
+            if mode != "clone" or not info.emotions:
+                raise BadRequest(f"Emoções só funcionam na clonagem com {self._emotion_models()}.")
+            if emotion not in {e["key"] for e in info.emotions}:
+                raise BadRequest(f"Emoção desconhecida: {emotion}")
+            from .steer import INTENSITIES
+
+            if intensity not in INTENSITIES:
+                raise BadRequest(f"Intensidade inválida: {intensity}")
         if not engine.is_loaded:
             raise NotReady(f"O modelo {model_id} não está carregado. Ative-o primeiro.")
 
@@ -69,7 +79,8 @@ class Studio:
             raise BadRequest("Digite o texto a ser falado.")
 
         req = GenerationRequest(mode=mode, text=spoken, language=language, params=resolved,
-                                instruct=(instruct or "").strip() or None, speaker=speaker)
+                                instruct=(instruct or "").strip() or None, speaker=speaker,
+                                emotion=emotion or None, intensity=intensity)
         ref_note = None
         if mode == "clone":
             if not voice_id:
@@ -111,6 +122,8 @@ class Studio:
         elapsed = time.perf_counter() - started
 
         recorded = {**resolved, "seed": seed, "chunks": len(chunks)}
+        if req.emotion:
+            recorded.update(emotion=req.emotion, intensity=req.intensity)
         if retries:
             recorded["retries"] = retries
         if ref_note:
@@ -125,6 +138,10 @@ class Studio:
             voice_id=req.voice_id, speaker=speaker, instruct=req.instruct, params=recorded,
             audio_path=path, duration=round(len(wav) / sr, 3), sample_rate=sr, elapsed=round(elapsed, 3),
         )
+
+    def _emotion_models(self) -> str:
+        names = [e.info.name for e in self.manager.engines.values() if e.info.emotions]
+        return " ou ".join(names) or "nenhum modelo instalado"
 
     def _text_language(self, language: str, voice_id: str | None) -> str:
         if language != "Auto" or not voice_id:
