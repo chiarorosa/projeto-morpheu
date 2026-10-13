@@ -75,6 +75,45 @@ class ModelManager:
                 raise RuntimeError(f"O modelo {model_id} não está carregado. Ative-o primeiro.")
             return fn(engine)
 
+    def run_aux(self, service, fn, progress=lambda message: None):
+        """Run fn(service) for a helper model (speech recognition) with exclusive GPU access.
+        When the resident voice model leaves too little memory, it is unloaded first and
+        loaded back afterwards, so the caller finds the GPU as it left it."""
+        with self._gpu_lock:
+            evicted = []
+            if service.vram_gb and self._free_vram_gb() < service.vram_gb:
+                for e in self.engines.values():
+                    if e.is_loaded:
+                        progress(f"Liberando a GPU ({e.info.name})…")
+                        e.unload()
+                        evicted.append(e)
+            try:
+                if not service.is_loaded:
+                    progress("Carregando o reconhecimento de fala…")
+                    service.load()
+                return fn(service)
+            finally:
+                service.unload()
+                for e in evicted:
+                    progress(f"Recarregando {e.info.name}…")
+                    try:
+                        e.load()
+                    except Exception as exc:
+                        with self._state_lock:
+                            self.state = ActiveState(e.info.id, "error", 0.0, "Falha ao recarregar",
+                                                     f"{type(exc).__name__}: {exc}")
+
+    @staticmethod
+    def _free_vram_gb() -> float:
+        try:
+            import torch
+
+            if torch.cuda.is_available():
+                return torch.cuda.mem_get_info()[0] / 2**30
+        except Exception:
+            pass
+        return float("inf")
+
     def forget_voice(self, voice_id: str) -> None:
         for e in self.engines.values():
             e.forget_voice(voice_id)

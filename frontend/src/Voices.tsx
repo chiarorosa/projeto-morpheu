@@ -1,27 +1,51 @@
 import { useEffect, useRef, useState } from "react";
 import { api, type Voice } from "./api";
+import { LANG_PT, VOICE_LANGUAGES } from "./langs";
 import { toWav } from "./wav";
 
 const SOURCE_LABEL = { upload: "Arquivo", recording: "Gravação", design: "Desenhada" } as const;
 
 export default function Voices({ voices, onChanged }: { voices: Voice[]; onChanged: () => void }) {
+  const [asr, setAsr] = useState(false);
+  const [analyzing, setAnalyzing] = useState<Record<string, boolean>>({});
+  const [analysisError, setAnalysisError] = useState<Record<string, string>>({});
+
+  useEffect(() => { api.system().then((s) => setAsr(s.asr)).catch(() => setAsr(false)); }, []);
+
+  const analyze = async (id: string) => {
+    setAnalyzing((a) => ({ ...a, [id]: true }));
+    setAnalysisError((e) => ({ ...e, [id]: "" }));
+    try {
+      await api.analyzeVoice(id);
+    } catch (e) {
+      setAnalysisError((err) => ({ ...err, [id]: (e as Error).message }));
+    } finally {
+      setAnalyzing((a) => ({ ...a, [id]: false }));
+      onChanged();
+    }
+  };
+
   return (
     <div className="studio">
-      <NewVoice onCreated={onChanged} />
+      <NewVoice onCreated={(v) => { onChanged(); if (asr) void analyze(v.id); }} />
       {voices.length === 0 ? (
-        <p className="muted">Nenhuma voz ainda. Envie um áudio de 3 a 15 segundos de fala limpa, ou grave pelo microfone.</p>
+        <p className="muted">Nenhuma voz ainda. Envie ou grave de 10 a 20 segundos de fala limpa.</p>
       ) : (
         <div className="voice-grid">
-          {voices.map((v) => <VoiceCard key={v.id} voice={v} onChanged={onChanged} />)}
+          {voices.map((v) => (
+            <VoiceCard key={v.id} voice={v} onChanged={onChanged} asr={asr}
+              analyzing={!!analyzing[v.id]} analysisError={analysisError[v.id]} onAnalyze={() => analyze(v.id)} />
+          ))}
         </div>
       )}
     </div>
   );
 }
 
-function NewVoice({ onCreated }: { onCreated: () => void }) {
+function NewVoice({ onCreated }: { onCreated: (v: Voice) => void }) {
   const [name, setName] = useState("");
   const [transcript, setTranscript] = useState("");
+  const [language, setLanguage] = useState("Portuguese");
   const [clip, setClip] = useState<{ wav: Blob; seconds: number; url: string; source: "upload" | "recording" } | null>(null);
   const [recording, setRecording] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -68,11 +92,11 @@ function NewVoice({ onCreated }: { onCreated: () => void }) {
     setBusy(true);
     setError(null);
     try {
-      await api.createVoice(name, transcript, clip.wav, clip.source);
+      const voice = await api.createVoice(name, transcript, clip.wav, clip.source, language);
       setName("");
       setTranscript("");
       setClip(null);
-      onCreated();
+      onCreated(voice);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -94,14 +118,26 @@ function NewVoice({ onCreated }: { onCreated: () => void }) {
         {clip && <span className="muted small">{clip.seconds.toFixed(1)} s</span>}
       </div>
       {clip && <audio controls src={clip.url} className="player" />}
-      {clip && clip.seconds < 3 && <p className="warn small">Referências com menos de 3 s costumam clonar mal.</p>}
+      {clip && clip.seconds < 5 && <p className="warn small">Referências com menos de 5 s clonam mal na maioria dos modelos.</p>}
+      <p className="muted small">
+        Pode ser longa: para cada modelo o Morpheu usa o trecho mais fluente que começa e termina em fim de frase
+        (até 10–15 s, conforme o modelo).
+      </p>
+      <div className="row wrap">
+        <label className="field grow">
+          <span>Nome</span>
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex.: Narradora" />
+        </label>
+        <label className="field">
+          <span>Idioma falado</span>
+          <select value={language} onChange={(e) => setLanguage(e.target.value)}>
+            {VOICE_LANGUAGES.map((l) => <option key={l} value={l}>{LANG_PT[l] ?? l}</option>)}
+          </select>
+        </label>
+      </div>
       <label className="field">
-        <span>Nome</span>
-        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex.: Narradora" />
-      </label>
-      <label className="field">
-        <span>Transcrição do áudio <em className="muted">(recomendado: melhora muito a clonagem)</em></span>
-        <textarea rows={2} value={transcript} onChange={(e) => setTranscript(e.target.value)} placeholder="Exatamente o que é falado no áudio de referência" />
+        <span>Transcrição do áudio <em className="muted">(opcional: se ficar em branco, é feita automaticamente)</em></span>
+        <textarea rows={2} value={transcript} onChange={(e) => setTranscript(e.target.value)} placeholder="Exatamente o que é falado no áudio de referência, com a pontuação" />
       </label>
       <div className="row end">
         <button className="btn primary" onClick={save} disabled={!clip || !name.trim() || busy}>{busy ? "Salvando…" : "Salvar voz"}</button>
@@ -111,7 +147,14 @@ function NewVoice({ onCreated }: { onCreated: () => void }) {
   );
 }
 
-function VoiceCard({ voice, onChanged }: { voice: Voice; onChanged: () => void }) {
+function VoiceCard({ voice, onChanged, asr, analyzing, analysisError, onAnalyze }: {
+  voice: Voice;
+  onChanged: () => void;
+  asr: boolean;
+  analyzing: boolean;
+  analysisError?: string;
+  onAnalyze: () => void;
+}) {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(voice.name);
   const [transcript, setTranscript] = useState(voice.transcript);
@@ -147,8 +190,32 @@ function VoiceCard({ voice, onChanged }: { voice: Voice; onChanged: () => void }
         <p className="muted small clamp">{voice.transcript || "Sem transcrição"}</p>
       )}
       {voice.design_prompt && <p className="muted small clamp">“{voice.design_prompt}”</p>}
+      <div className="row wrap">
+        <span className="tag subtle">{LANG_PT[voice.language] ?? voice.language}</span>
+        {voice.transcript_source === "auto" && <span className="tag subtle">transcrição automática</span>}
+        {voice.has_timings && <span className="tag subtle" title="Tempos de cada palavra, usados para recortar a referência entre frases">palavras alinhadas</span>}
+      </div>
+      {voice.transcript_mismatch && (
+        <div className="warn small">
+          A transcrição não bate com o áudio. Foi ouvido: “{voice.heard_text}”.{" "}
+          <button className="link" onClick={async () => {
+            await api.updateVoice(voice.id, { transcript: voice.heard_text });
+            onChanged();
+            if (asr) onAnalyze();
+          }}>Usar o que foi ouvido</button>
+        </div>
+      )}
+      {analyzing && <p className="muted small">Analisando a referência (transcrição e alinhamento)…</p>}
+      {analysisError && <div className="alert small">{analysisError}</div>}
       <div className="row between">
-        <span className="muted small">{voice.duration.toFixed(1)} s</span>
+        <div className="row">
+          <span className="muted small">{voice.duration.toFixed(1)} s</span>
+          {asr && !editing && !analyzing && voice.source !== "design" && (!voice.has_timings || !voice.transcript) && (
+            <button className="btn small ghost" onClick={onAnalyze}>
+              {voice.transcript ? "Alinhar palavras" : "Transcrever automaticamente"}
+            </button>
+          )}
+        </div>
         <div className="row">
           {editing ? (
             <>

@@ -8,10 +8,14 @@ Requisitos: Windows, Python 3.12, GPU NVIDIA com 8 GB de VRAM ou mais, Node.js 2
 
 ```
 py -3.12 -m venv .venv
-.venv\Scripts\python.exe -m pip install torch --index-url https://download.pytorch.org/whl/cu128
-.venv\Scripts\python.exe -m pip install -e "backend[dev]"
+.venv\Scripts\python.exe -m pip install torch==2.11.0 torchaudio==2.11.0 --index-url https://download.pytorch.org/whl/cu128
+.venv\Scripts\python.exe -m pip install --no-deps -r backend\requirements.lock.txt
+.venv\Scripts\python.exe -m pip install --no-deps -e backend
 cd frontend && npm ci && npm run build
 ```
+
+As bibliotecas dos motores fixam versões incompatíveis entre si (torch 2.6/2.8, transformers 4.46/5.3), por isso
+o ambiente é instalado sem resolver dependências, a partir de `requirements.lock.txt`, o conjunto testado.
 
 ## Uso
 
@@ -23,22 +27,59 @@ morpheu.cmd --server     só a API
 
 Fluxo típico:
 
-1. **Biblioteca** → envie ou grave de 3 a 15 s de fala limpa e cole a transcrição exata.
-2. **Clonar** → carregue o modelo, escolha a voz, digite o texto e clique em **Gerar fala**.
+1. **Biblioteca** → envie ou grave de 10 a 30 s de fala limpa, escolha o idioma e, se quiser, cole a transcrição
+   (em branco, ela é feita automaticamente). A referência é analisada logo depois de salva.
+2. **Clonar** → escolha um modelo (os marcados "bom em português" são os indicados para pt-BR), carregue-o,
+   escolha a voz, digite o texto e clique em **Gerar fala**.
 3. **Desenhar** → descreva a voz, gere e use **Salvar na biblioteca**; ela passa a valer em Clonar.
 
 Na primeira vez que cada modelo é carregado, ele é baixado do Hugging Face para `models/`.
 
-## Modelos (Qwen3-TTS, Apache-2.0)
+## Modelos
 
-| ID | Modo | VRAM aprox. |
-|---|---|---|
-| `qwen3-clone-0.6b` | Clonar (rápido) | ~3 GB |
-| `qwen3-clone-1.7b` | Clonar (qualidade) | ~6 GB |
-| `qwen3-design` | Desenhar por descrição | ~6 GB |
-| `qwen3-voices` | Vozes prontas + instruções de tom | ~6 GB |
+| ID | Modo | Referência usada | VRAM | Licença |
+|---|---|---|---|---|
+| `omnivoice` | Clonar · muito rápido, 600+ idiomas | 3–10 s | ~2 GB | Apache-2.0 |
+| `chatterbox-multilingual` | Clonar · expressividade ajustável, só o áudio | 3–10 s | ~4 GB | MIT |
+| `voxcpm2` | Clonar · 48 kHz, maior fidelidade | 3–15 s | ~6 GB | Apache-2.0 |
+| `qwen3-clone-0.6b` / `-1.7b` | Clonar | 1,5–10 s | ~3 / ~6 GB | Apache-2.0 |
+| `qwen3-design` | Desenhar por descrição | — | ~6 GB | Apache-2.0 |
+| `qwen3-voices` | Vozes prontas + instruções de tom | — | ~6 GB | Apache-2.0 |
 
-Só um modelo fica na GPU por vez; ao trocar, o anterior é descarregado.
+Medido numa RTX 3060 Ti com uma referência real em pt-BR e a mesma frase de 225 caracteres:
+
+| Modelo | Tempo | Erro de palavras* | Semelhança de voz** |
+|---|---|---|---|
+| OmniVoice | 5 s | 0,04 | 0,959 |
+| Chatterbox | 21 s | 0,06 | 0,959 |
+| VoxCPM2 | 30 s | 0,04 | 0,960 |
+| Qwen3 1.7B | 56 s | 0,06 | 0,960 |
+
+\* Qwen3-ASR transcrevendo a saída, comparado ao texto. \*\* Cosseno entre embeddings de locutor (codificador do Chatterbox).
+Os números medem pronúncia e timbre; sotaque e naturalidade só se avaliam ouvindo.
+
+Só um modelo de voz fica na GPU por vez; ao trocar, o anterior é descarregado. O reconhecimento de fala
+(Qwen3-ASR 1.7B + Qwen3-ForcedAligner 0.6B) é carregado só durante a análise de uma referência; se faltar
+memória, o modelo de voz ativo é descarregado e recarregado em seguida.
+
+## Como a clonagem funciona
+
+1. **Texto** — tags como `[laugh]` são removidas; números, valores (R$, US$, €), porcentagens, horas, ordinais,
+   unidades e abreviações são escritos por extenso no idioma, com concordância de gênero em português
+   ("2 dúzias" → "duas dúzias"). Desligável em "Ler números por extenso".
+2. **Referência** — sem transcrição, ela é feita automaticamente e guardada na voz. Cada palavra recebe seu
+   tempo (alinhamento forçado). Quando a gravação passa do limite do modelo, é usado o trecho **fluente** mais
+   longo que começa e termina em fim de frase (pausas ≤ 20% do trecho, nenhuma acima de 0,6 s), com a
+   transcrição cortada no mesmo ponto; sem tempos, corta na última pausa e transcreve só o trecho.
+   Uma transcrição digitada que não bate com o áudio é sinalizada na Biblioteca.
+3. **Geração** — textos longos são divididos em trechos de frases inteiras, no tamanho que cada modelo aguenta.
+   Saída "em loop" (longa demais para o texto), com silêncio colapsado ou vazia é descartada e o trecho é
+   refeito com outra semente (até 3 tentativas).
+4. **Acabamento** — os trechos são unidos com pausas curtas, o silêncio das pontas é cortado e a loudness é
+   nivelada em −18 LUFS (pico ≤ −1 dBFS).
+
+No Histórico, cada geração mostra o trecho da referência usado, o texto efetivamente falado e se algum
+trecho foi refeito.
 
 ## Estrutura
 
@@ -48,8 +89,15 @@ backend/morpheu/
   studio.py         pipeline: valida → resolve voz → gera → pós-processa → grava histórico
   manager.py        um modelo residente por vez, carregamento em segundo plano, lock de GPU
   engines/base.py   contrato de motor (ModelInfo, ParamSpec, GenerationRequest)
-  engines/qwen3.py  motores Qwen3-TTS (cache das features de referência por voz)
-  engines/fake.py   motor de teste sem GPU (MORPHEU_FAKE_ENGINES=1)
+  engines/          omnivoice, chatterbox, voxcpm, qwen3 (+ fake.py: motor de teste sem GPU)
+  reference.py      transcrição automática, alinhamento e recorte da referência por modelo
+  refwindow.py      escolha do trecho fluente entre fins de frase
+  asr.py            Qwen3-ASR + ForcedAligner, checagem de transcrição divergente
+  textnorm.py       números, valores, horas e abreviações por extenso
+  chunker.py        divisão de textos longos em frases
+  quality.py        detecção de saída defeituosa, loudness, junção de trechos
+  compat.py         torchaudio via soundfile; download do HF sem a corrida de symlinks no Windows
+  vendor/           tokenizer Higgs do transformers 5 (Apache-2.0) para o OmniVoice rodar no transformers 4.57
   voices.py         biblioteca em data/voices/<id>/
   history.py        histórico em SQLite + WAVs em data/outputs/
   audio.py          leitura/escrita, corte de silêncio, normalização
@@ -81,9 +129,10 @@ A API escuta só em 127.0.0.1 e não tem autenticação.
 
 ## Próximas fases
 
-- Mais motores: Chatterbox (leve, tags paralinguísticas), VoxCPM (48 kHz)
-- Streaming da geração e textos longos divididos em trechos
-- STT (ditado e transcrição automática da referência)
+- Clonagem com emoção controlada (o original usa vetores de direção próprios para o Qwen3)
+- Desenhar voz também com OmniVoice e VoxCPM2
+- Streaming da geração
+- STT (ditado e transcrição de arquivos)
 - Audiobook: importar PDF/DOCX/EPUB, personagens e uma voz por personagem
 - Dublagem: transcrever, traduzir, revozear e legendar
 - Servidor MCP

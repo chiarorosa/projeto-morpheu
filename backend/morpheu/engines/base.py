@@ -40,7 +40,8 @@ class ParamSpec:
 # Parameters every engine gets from the pipeline, independent of the model.
 COMMON_PARAMS = [
     ParamSpec("preprocess_prompt", "Limpar referência", "Remove silêncio e equaliza o volume da referência antes de clonar.", "bool", True),
-    ParamSpec("postprocess_output", "Polir saída", "Corta silêncio morto e nivela o volume do resultado.", "bool", True),
+    ParamSpec("postprocess_output", "Polir saída", "Corta silêncio morto e nivela a loudness do resultado.", "bool", True),
+    ParamSpec("normalize_text", "Ler números por extenso", "Escreve números, valores, porcentagens, horas e abreviações como devem ser falados.", "bool", True),
     ParamSpec("seed", "Semente", "0 = aleatória a cada geração; outro valor reproduz o resultado.", "int", 0, 0, 2**31 - 1, 1),
 ]
 
@@ -54,6 +55,16 @@ class ModelInfo:
     languages: list[str] = field(default_factory=lambda: list(LANGUAGES))
     params: list[ParamSpec] = field(default_factory=list)
     vram_gb: float = 0.0
+    # Reference window the model clones best from; longer clips are cut to their most
+    # fluent sentence-aligned stretch, shorter ones are padded or rejected.
+    ref_min_sec: float = 1.5
+    ref_max_sec: float = 10.0
+    # Whether the model reads the reference transcript (Chatterbox only hears the audio).
+    uses_ref_text: bool = True
+    # Longest text sent in one call; longer input is split at sentence boundaries.
+    max_chunk_chars: int = 400
+    sample_rate: int = 24000
+    recommended_for: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         d = asdict(self)
@@ -83,6 +94,8 @@ class GenerationRequest:
     voice_id: str | None = None
     ref_audio_path: str | None = None
     ref_text: str | None = None
+    # Identifies voice + reference window, so engines can cache features per window.
+    ref_key: str | None = None
     # design / tts
     instruct: str | None = None
     speaker: str | None = None

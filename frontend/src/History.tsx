@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type Generation } from "./api";
+import { GenerationDetails } from "./Studio";
 
 const MODE_LABEL = { clone: "Clonada", design: "Desenhada", tts: "Voz pronta" } as const;
 
@@ -48,6 +49,7 @@ function Row({ item, onDeleted, onVoicesChanged }: { item: Generation; onDeleted
       <p className="hist-text">{item.text}</p>
       {item.instruct && <p className="muted small">“{item.instruct}”</p>}
       <audio controls preload="none" src={api.historyAudioUrl(item.id)} className="player" />
+      <GenerationDetails item={item} />
       <div className="row between wrap">
         <div className="row">
           <a className="btn small ghost" href={api.historyAudioUrl(item.id, true)}>Baixar</a>

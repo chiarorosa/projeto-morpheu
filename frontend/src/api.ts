@@ -19,6 +19,12 @@ export interface ModelInfo {
   languages: string[];
   params: ParamSpec[];
   vram_gb: number;
+  ref_min_sec: number;
+  ref_max_sec: number;
+  uses_ref_text: boolean;
+  max_chunk_chars: number;
+  sample_rate: number;
+  recommended_for: string[];
   status: "unloaded" | "loading" | "ready" | "error";
 }
 
@@ -38,7 +44,14 @@ export interface Voice {
   design_prompt: string | null;
   duration: number;
   created_at: number;
+  language: string;
+  transcript_source: "manual" | "auto" | "";
+  transcript_mismatch: boolean;
+  heard_text: string;
+  has_timings: boolean;
 }
+
+export type ParamValue = number | boolean;
 
 export interface Generation {
   id: string;
@@ -50,7 +63,7 @@ export interface Generation {
   voice_id: string | null;
   speaker: string | null;
   instruct: string | null;
-  params: Record<string, number | boolean>;
+  params: Record<string, ParamValue | string>;
   duration: number;
   sample_rate: number;
   elapsed: number;
@@ -64,7 +77,7 @@ export interface GenerateRequest {
   voice_id?: string;
   instruct?: string;
   speaker?: string;
-  params: Record<string, number | boolean>;
+  params: Record<string, ParamValue>;
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -98,16 +111,20 @@ export const api = {
   generate: (req: GenerateRequest) => request<Generation>("/api/v1/tts/generate", json("POST", req)),
 
   voices: () => request<Voice[]>("/api/v1/voices"),
-  createVoice: (name: string, transcript: string, wav: Blob, source: "upload" | "recording") => {
+  system: () => request<{ asr: boolean }>("/api/v1/system"),
+  createVoice: (name: string, transcript: string, wav: Blob, source: "upload" | "recording", language: string) => {
     const fd = new FormData();
     fd.append("name", name);
     fd.append("transcript", transcript);
     fd.append("source", source);
+    fd.append("language", language);
     fd.append("audio", wav, "reference.wav");
     return request<Voice>("/api/v1/voices", { method: "POST", body: fd });
   },
-  updateVoice: (id: string, patch: { name?: string; transcript?: string }) =>
+  updateVoice: (id: string, patch: { name?: string; transcript?: string; language?: string }) =>
     request<Voice>(`/api/v1/voices/${id}`, json("PATCH", patch)),
+  analyzeVoice: (id: string, language?: string) =>
+    request<Voice>(`/api/v1/voices/${id}/analyze`, json("POST", language ? { language } : {})),
   deleteVoice: (id: string) => request<void>(`/api/v1/voices/${id}`, { method: "DELETE" }),
   voiceFromHistory: (history_id: string, name: string) =>
     request<Voice>("/api/v1/voices/from-history", json("POST", { history_id, name })),

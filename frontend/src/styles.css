@@ -109,3 +109,7 @@ details summary { cursor: pointer; }
   .gpu-badge { display: none; }
   .main { padding: 16px; }
 }
+.tag.subtle { text-transform: none; letter-spacing: 0; color: var(--muted); }
+.hints { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+.hints.warn { color: var(--warn); }
+.link { background: none; border: 0; padding: 0; color: var(--accent-2); text-decoration: underline; cursor: pointer; font: inherit; }
