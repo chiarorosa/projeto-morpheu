@@ -1,9 +1,9 @@
 """Turn a saved voice into the reference a given model clones from.
 
-A clip without a transcript is transcribed
-(and the voice keeps that transcript), a clip longer than the model's limit is cut to its most
-fluent sentence-aligned stretch with the transcript sliced to match, and when no sentence
-boundary fits it is cut at the last pause and the cut is transcribed on its own.
+A clip without a transcript is transcribed (and the voice keeps that transcript), a clip
+longer than the model's limit is cut to its most fluent sentence-aligned stretch with the
+transcript sliced to match, and when no sentence boundary fits it is cut at the last pause
+and the cut is transcribed on its own.
 """
 
 from dataclasses import dataclass
